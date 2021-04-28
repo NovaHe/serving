@@ -183,13 +183,16 @@ func certClass(ctx context.Context) string {
 }
 
 func (r *Reconciler) tls(ctx context.Context, dm *v1alpha1.DomainMapping) ([]netv1alpha1.IngressTLS, []netv1alpha1.HTTP01Challenge, error) {
+	desiredCert := resources.MakeCertificate(dm, certClass(ctx))
 	if !autoTLSEnabled(ctx, dm) {
+		err := r.netclient.NetworkingV1alpha1().Certificates(desiredCert.Namespace).Delete(ctx, desiredCert.Name, metav1.DeleteOptions{})
+		if !apierrs.IsNotFound(err) {
+			return nil, nil, err
+		}
 		dm.Status.MarkTLSNotEnabled(v1.AutoTLSNotEnabledMessage)
 		return nil, nil, nil
 	}
-
 	acmeChallenges := []netv1alpha1.HTTP01Challenge{}
-	desiredCert := resources.MakeCertificate(dm, certClass(ctx))
 	cert, err := networkaccessor.ReconcileCertificate(ctx, dm, desiredCert, r)
 	if err != nil {
 		if kaccessor.IsNotOwned(err) {
